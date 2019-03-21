@@ -2,9 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
-
-# import seaborn as sns
+import seaborn as sns
 
 
 def load_matrix(path, sep='\t'):
@@ -155,7 +153,6 @@ def draw_batch(matrix, xs, ys, ions, path='img', format='png'):
     # Create and save picture for each ion
     for ion in ions:
         _draw(matrix, rows, cols, ion, path)
-    plt.close('all')
 
 
 def compute_layout(plot_number, width_height=(6, 4)):
@@ -221,6 +218,58 @@ def draw_panel(matrix, xs, ys, ions, width_height=(6, 4), save=False, path='img'
     else:
         draw(matrix, xs, ys, ions[0], save, path, format)
     plt.close()
+
+
+def compute_width_height(xs, ys):
+    """
+    Compute values of picture width and height
+    :param xs: array - 1d np.arrays with 0-based x coordinates of pixels in picture
+    :param ys: array - 1d np.arrays with 0-based y coordinates of pixels in picture
+    :return: (float, float) - width and height of picture
+    """
+    # 22.5 is just an empiric observation
+    return xs.max() / 22.5, ys.max() / 22.5
+
+
+def draw_species_panels(matrix_path, path, species='h', span=(500, 1501), format='png'):
+    """
+    Draw array of images with ion intensities from ions on picture as a panel for all ion groups for specified species
+    :param matrix_path: str - path to the matrix
+    :param path: str - path to directory to save images
+    :param species: str - species to select from the matrix
+    :param span: tuple - from which to which
+    :param format: str - format of image, 'png' by default
+    :return:
+    """
+    # Load matrix
+    matrix = load_matrix(matrix_path, sep='\t')
+
+    # Zero pixels
+    zeros(matrix)
+    # Multiindex adding
+    reindexing(matrix)
+    # # of duplicates
+    duplications(matrix)
+
+    # Take only 1 species
+    selected_data = matrix.query(f'species == "{species}"')
+
+    # Pixel coordinates
+    xs, ys = get_coords(selected_data)
+
+    # Width and height of each panel
+    width_height = compute_width_height(xs, ys)
+
+    # Iterate over ion groups in df columns and draw panel of them
+    for i, ion_group in enumerate(range(*span)):
+        if i % 10 == 0:
+            print(f'{ion_group} processing')
+
+        # Take ions
+        ions = selected_data.filter(regex=rf'^{ion_group}.*').columns
+        # Don't draw if there is no ions in this group
+        if ions.size:
+            draw_panel(selected_data, xs, ys, ions, width_height=width_height, save=True, path=path, format=format)
 
 
 def mz_intensity_plot(mz_intensity, ion_range=None, save=False, path='img', format='png'):
@@ -405,3 +454,4 @@ if __name__ == '__main__':
     mz_intensity_plot(mz_intensity_merged)
     # Plot intensities of range of mz
     mz_intensity_plot(mz_intensity_merged, (700, 715))
+
