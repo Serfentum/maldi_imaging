@@ -418,6 +418,106 @@ def matrix_to_mz_intensities(matrix):
     return matrix.sum()
 
 
+def load_maldi_lc(lcms, matrix):
+    lcms = pd.read_csv(lcms, sep='\t', index_col=0)
+    matrix = pd.read_csv(matrix, sep='\t')
+
+    # Multiindex
+    reindexing(matrix)
+    return lcms, matrix
+
+
+def naive_align_peaks(lcms, matrix, threshold=5):
+    # Convert ppm to fraction
+    threshold *= 1e-6
+
+    # Get relative differences between each ion in LC and MALDI
+    lc_diffs = {lc: {(m, difference(lc, m)) for m in matrix.columns} for lc in lcms.mz}
+    # Get only mz with minimal ppm difference - will contains only 1 variant for ion
+    lc_diffs = {lc: min(diffs, key=lambda x: x[1]) for lc, diffs in lc_diffs.items()}
+    # Filter out peaks with relative difference > than 5ppm
+    lc_diffs = {lc: diff for lc, diff in lc_diffs.items() if diff[1] <= threshold}
+
+    # Dictionary with correspondance between MALDI and LC aligned peaks
+    renaming = {m: lc for lc, (m, _) in lc_diffs.items()}
+    print(f'Number of aligned peaks is {len(renaming)}')
+
+    # Make peak mz consistent in MALDI and LC
+    aligned_matrix = matrix.rename(columns=renaming)
+    aligned_matrix = aligned_matrix[list(sorted(renaming.values()))]
+    return aligned_matrix, renaming
+
+
+def get_ratio(intensities1, intensities2):
+    """
+    Get ratio of corresponding intensities from intensities1 and intensities2
+    :param intensities1: iterable - collection with intensities in a form of series or scalar
+    :param intensities2: iterable - collection with intensities in a form of series or scalar
+    :return: list - list with ratios of corresponding intensities
+    """
+    ratios = []
+
+    # Iterate over each intensity and divide 1st on the 2nd
+    for ints1, ints2 in zip(intensities1, intensities2):
+        ratios.append(ints1 / ints2)
+    return ratios
+
+
+def get_correlations(intensities1, intensities2):
+    """
+    Compute correlations of corresponding intensities from intensities1 and intensities2
+    :param intensities1: series - series with intensities
+    :param intensities2: series - series with intensities
+    :return: list - list with correlations between pairs of intensity series
+    """
+    corrs = []
+    for ints1, ints2 in zip(intensities1, intensities2):
+        corrs.append(ints1.corr(ints2))
+    return corrs
+
+
+def subsetting_mean(lcms, matrix, renaming):
+    # todo generalize
+    """
+    Take groups from LC and MALDI and return mean for each peak in each group
+    :param matrix: df - df with all data
+    :return: (series, series, series, series, series, series) - tuple of series with mean for each group
+    """
+    # Use mz as an index
+    lcms.set_index('mz', inplace=True)
+
+    # Get species subsets of LC
+    human_lc = lcms.filter(regex=r'_H[ABCD]')
+    chimp_lc = lcms.filter(regex=r'_CH[ABCD]')
+    macaque_lc = lcms.filter(regex=r'_M[ABCD]')
+
+    # Create an iterable with LC subsets
+    lcs = [human_lc, chimp_lc, macaque_lc]
+    lcs_avg = []
+
+    for ls in lcs:
+        # Compute mean for each peak
+        ls_mean = ls.mean(axis=1)
+
+        # Get only aligned peaks
+        aligned = ls_mean[ls_mean.index.isin(renaming.values())]
+        lcs_avg.append(aligned)
+
+    # Get average intensities of each species
+    human_lca, chimp_lca, macaque_lca = lcs_avg
+
+    # Get species subsets
+    human_maldi = matrix.query('species == "h"')
+    chimp_maldi = matrix.query('species == "c"')
+    macaque_maldi = matrix.query('species == "m"')
+
+    # Take mean for each peak in maldi
+    human_maldi = human_maldi.mean()
+    chimp_maldi = chimp_maldi.mean()
+    macaque_maldi = macaque_maldi.mean()
+    return human_lca, chimp_lca, macaque_lca, human_maldi, chimp_maldi, macaque_maldi
+
+
 # Example of usage
 if __name__ == '__main__':
     # Load matrix
