@@ -518,6 +518,250 @@ def subsetting_mean(lcms, matrix, renaming):
     return human_lca, chimp_lca, macaque_lca, human_maldi, chimp_maldi, macaque_maldi
 
 
+# From RGB hex to decimal values
+to_rgb = {'#DC143C': [220, 20, 60],
+          '#FFD700': [255, 215, 0],
+          '#BDB76B': [189, 183, 107],
+          '#006400': [0, 100, 0],
+          '#2E8B57': [46, 139, 87],
+          '#000080': [0, 0, 128],
+          '#483D8B': [72, 61, 139],
+          '#800080': [128, 0, 128],
+          '#556B2F': [85, 107, 47],
+          '#1E90FF': [30, 144, 255],
+          '#4B0082': [75, 0, 130],
+          '#008080': [0, 128, 128]}
+
+# From RGB hex to normalized values
+to_rgb = {k: [v / 255 for v in vs] for k, vs in to_rgb.items()}
+
+# Set of RGB colors to different clusters
+colors = {2: ['#DC143C', '#FFD700'],
+          3: ['#DC143C', '#FFD700', '#BDB76B'],
+          4: ['#DC143C', '#FFD700', '#BDB76B', '#006400'],
+          5: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57'],
+          6: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#008080'],
+          7: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#008080', '#483D8B'],
+          8: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080'],
+          9: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F'],
+          10: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F',
+               '#1E90FF'],
+          11: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F',
+               '#1E90FF', '#4B0082'],
+          12: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F',
+               '#1E90FF', '#4B0082', '#008080']}
+# Set of normalized rgb values
+colors_rgb = {k: [to_rgb[v] for v in vs] for k, vs in colors.items()}
+
+
+def kmeans_clustering(data, n=12):
+    """
+    Cluster data with k-means algorithm on [2, n) clusters, return dictionary with cluster labels
+    :param data: df - dataframe with selected data (i.e. from 1 species)
+    :param n: int - maximum number of clusters to divide
+    :return: dict - dictionary in form of {cluster_number: [cluster_labels]}
+    """
+    # Dictionary with cluster labels for each cluster
+    clusters = {}
+
+    # Clustering for each number of clusters, get label of each pixel
+    for i in range(2, n):
+        print(f'processing separation on {i} clusters')
+        # Cluster and assign labels to dict
+        pixel_labels_kmeans = KMeans(n_clusters=i).fit_predict(data)
+        clusters[n] = pixel_labels_kmeans
+    return clusters
+
+
+def _auxiliary(data, n=12):
+    """
+    Compute parameters necessary for plotting
+    :param data: df - data, used for clustering, which going to be plotted
+    :param n: int - maximum number of clusters to divide
+    :return: (xs, ys, nrows, ncols, figsize, rows, cols) - tuple with parameters necessary for panel draw
+    """
+    # Auxiliary preparation
+    xs, ys = get_coords(data)
+    width_height = compute_width_height(xs, ys)
+    nrows, ncols, figsize = compute_layout(n - 2, width_height)
+    rows = ys.max() + 1
+    cols = xs.max() + 1
+    return xs, ys, nrows, ncols, figsize, rows, cols
+
+
+def _draw_clusters(clusters, xs, ys, nrows, ncols, figsize, rows, cols):
+    """
+    Draw clusterizations on 1 plot
+    :param clusters: dict - dictionary with cluster labels in form of {cluster_number: [cluster_labels]}
+    :param xs: array - 1d np.arrays with 0-based x coordinates of pixels in picture
+    :param ys: array - 1d np.arrays with 0-based y coordinates of pixels in picture
+    :param nrows: int - number of rows
+    :param ncols: int - number of cols
+    :param figsize: (float, float) - tuple with figure size
+    :param rows: int - number of rows in matrix
+    :param cols: int - number of cols in matrix
+    :return:
+    """
+    # Prepare subplots
+    f, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+    ax = ax.ravel()
+
+    # Draw each separation on i clusters with its color scheme
+    for i, cluster in clusters.items():
+        image = np.zeros((rows, cols, 3))
+        image[ys, xs] = colorize(image[ys, xs], cluster, colors_rgb[i])
+
+        # For concordance between subplot and clusteriation subplot
+        # 2 is a minimum of cluster number
+        ax[i - 2].imshow(image)
+        ax[i - 2].title.set_text(f'{i} clusters k-means')
+
+
+def colorize(image, cluster, colors):
+    """
+    Paint image
+    :param image: array - np 1d array subset of image matrix (3d) with pixels used in clusterization
+    (their number should be the same as cluster size)
+    :param cluster: array - np 1d array with cluster labels
+    :param colors: list - list with normalized rgb color values, like [[0, 0.125, 0.5], ...]
+    :return: colored subset of image matrix with pixels used in clusterization (values corresponds to a color now)
+    """
+    # For all clusters assign its pixel value to distinct rgb color
+    for c in np.unique(cluster):
+        image[cluster == c] = colors[c]
+    return image
+
+
+def draw_clusters(data, path, name, n=12, format='png'):
+    """
+    Cluster data with k-means on different number of clusters and plot these variants on 1 figure
+    :param data: df - data, used for clustering, which going to be plotted
+    :param path: str - path to folder where figure will be stored
+    :param name: str - name of figure file
+    :param n: int - maximum number of clusters, 12 by default
+    :param format: str - format of figure, png by default
+    :return:
+    """
+    # Cluster data with cluster number [2, n)
+    clusters = kmeans_clustering(data, n)
+
+    # Preparations to plotting
+    xs, ys, nrows, ncols, figsize, rows, cols = _auxiliary(data, n)
+    # Plotting
+    _draw_clusters(clusters, xs, ys, nrows, ncols, figsize, rows, cols)
+
+    # Save figure and close everything
+    os.makedirs(path, exist_ok=True)
+    plt.savefig(f'{path}/{name}.{format}', format=format)
+    plt.close()
+
+
+# Mapping from letter to species
+species_to_name = {'h': 'human',
+                   'c': 'chimp',
+                   'm': 'macaque'}
+
+
+def draw_area_clusters(files, n=12, format='png'):
+    """
+    Draw k-mean clusterization with number of clusters from 2 to n on 1 plot
+    :param files: iterable - collection with full paths to a matrix files
+    :param n: int - maximum number of clusters, 12 by default
+    :param format: str - format of figure, png by default
+    :return:
+    """
+    for file in files:
+        # Load data
+        matrix = load_matrix(f'{file}')
+        print(f'Loaded {file}')
+
+        # Get name of file without extension
+        file = file.split('/')[-1].split('.')[0]
+
+        # Zero pixels
+        zeros(matrix)
+        # Multiindex
+        reindexing(matrix)
+
+        for species in ['h', 'c', 'm']:
+            # Get data for 1 species
+            subset = matrix.query(f'species == "{species}"')
+            print(f'Working with {species} subset')
+
+            # Clustering
+            draw_clusters(subset, f'images/{file}/clusters/area/', name=f'kmeans_{species_to_name[species]}_clusters.{format}',
+                          n=n, format=format)
+
+
+def draw_peak_clusters(files, n=12, format='png'):
+    for file in files:
+        # Load data
+        matrix = load_matrix(f'{file}')
+        file = file.split('/')[-1].split('.')[0]
+        print('Loaded')
+        # Zero pixels
+        zeros(matrix)
+        # Multiindex
+        reindexing(matrix)
+
+        #
+        for species in ['h', 'c', 'm']:
+            # Take 1 species
+            subset = matrix.query(f'species == "{species}"')
+            print(f'Working with {species} subset')
+
+            # Clustering
+            clusters = kmeans_clustering(subset.T, n)
+
+            # # Dictionary with cluster labels for each cluster
+            # clusters = {}
+            # # Clustering for each number of clusters, get label of each pixel
+            # for i in range(2, n):
+            #     print(f'processing separation on {i} clusters')
+            #     # Cluster and assign labels to dict
+            #     peak_labels_kmeans = KMeans(n_clusters=i).fit_predict(subset.T)
+            #     clusters[i] = peak_labels_kmeans
+
+            # Plot preparation
+            xs, ys, rows, cols, width_height = light_plot_preparation(subset)
+
+            # Create directory
+            os.makedirs(f'images/{file}/clusters/peaks', exist_ok=True)
+
+            for i, cluster in enumerate(clusters.values(), 2):
+                # Prepare subplots
+                nrows, ncols, figsize = compute_layout(i, width_height)
+                f, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+                ax = ax.ravel()
+
+                # Draw each subplot
+                for j in range(i):
+                    image = np.zeros((rows, cols))
+                    image[ys, xs] = subset.loc[:, cluster == j].sum(axis=1)
+                    # 2 - minima of cluster number
+                    ax[j].imshow(image)
+                    ax[j].title.set_text(f'{i} clusters k-means, cluster #{j}')
+                plt.savefig(f'images/{file}/clusters/peaks/kmeans_{species_to_name[species]}_clusters_{i}.{format}',
+                            format=format)
+
+
+def light_plot_preparation(data):
+    """
+    Helper to get necessary for plotting information
+    :param data: df - pandas df with all data with new MultiIndex
+    :return: tuple - xs and ys coordinates, number of rows and columns in a matrix and width and height of image
+    """
+    # Plot preparation
+    xs, ys = get_coords(data)
+    rows = ys.max() + 1
+    cols = xs.max() + 1
+    width_height = compute_width_height(xs, ys)
+    return xs, ys, rows, cols, width_height
+
+
+
+
+
 # Example of usage
 if __name__ == '__main__':
     # Load matrix
