@@ -4,6 +4,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from sklearn.cluster import DBSCAN
+from sklearn.cluster import KMeans
+
 
 def load_matrix(path, sep='\t'):
     """
@@ -664,7 +667,7 @@ species_to_name = {'h': 'human',
 
 def draw_area_clusters(files, n=12, format='png'):
     """
-    Draw k-mean clusterization with number of clusters from 2 to n on 1 plot
+    Draw area k-mean clusterization with number of clusters from 2 to n on 1 plot
     :param files: iterable - collection with full paths to a matrix files
     :param n: int - maximum number of clusters, 12 by default
     :param format: str - format of figure, png by default
@@ -694,15 +697,25 @@ def draw_area_clusters(files, n=12, format='png'):
 
 
 def draw_peak_clusters(files, n=12, format='png'):
+    """
+    Draw peak k-mean clusterization with number of clusters from 2 to n. There is a picture with all
+    :param files: iterable - collection with full paths to a matrix files
+    :param n: int - maximum number of clusters, 12 by default
+    :param format: str - format of figure, png by default
+    :return:
+    """
     for file in files:
         # Load data
         matrix = load_matrix(f'{file}')
         file = file.split('/')[-1].split('.')[0]
-        print('Loaded')
+        print(f'Loaded {file}')
         # Zero pixels
         zeros(matrix)
         # Multiindex
         reindexing(matrix)
+
+        # Create directory
+        os.makedirs(f'images/{file}/clusters/peaks', exist_ok=True)
 
         #
         for species in ['h', 'c', 'm']:
@@ -713,23 +726,11 @@ def draw_peak_clusters(files, n=12, format='png'):
             # Clustering
             clusters = kmeans_clustering(subset.T, n)
 
-            # # Dictionary with cluster labels for each cluster
-            # clusters = {}
-            # # Clustering for each number of clusters, get label of each pixel
-            # for i in range(2, n):
-            #     print(f'processing separation on {i} clusters')
-            #     # Cluster and assign labels to dict
-            #     peak_labels_kmeans = KMeans(n_clusters=i).fit_predict(subset.T)
-            #     clusters[i] = peak_labels_kmeans
-
-            # Plot preparation
             xs, ys, rows, cols, width_height = light_plot_preparation(subset)
 
-            # Create directory
-            os.makedirs(f'images/{file}/clusters/peaks', exist_ok=True)
 
-            for i, cluster in enumerate(clusters.values(), 2):
-                # Prepare subplots
+
+            for i, cluster in clusters.items():
                 nrows, ncols, figsize = compute_layout(i, width_height)
                 f, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
                 ax = ax.ravel()
