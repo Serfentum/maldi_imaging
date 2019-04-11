@@ -569,10 +569,10 @@ def kmeans_clustering(data, n=12):
 
     # Clustering for each number of clusters, get label of each pixel
     for i in range(2, n):
-        print(f'processing separation on {i} clusters')
+        print(f'\rprocessing separation on {i} clusters', end='')
         # Cluster and assign labels to dict
-        pixel_labels_kmeans = KMeans(n_clusters=i).fit_predict(data)
-        clusters[n] = pixel_labels_kmeans
+        clusters[i] = KMeans(n_clusters=i).fit_predict(data)
+    print()
     return clusters
 
 
@@ -706,7 +706,7 @@ def draw_peak_clusters(files, n=12, format='png'):
     """
     for file in files:
         # Load data
-        matrix = load_matrix(f'{file}')
+        matrix = load_matrix(file)
         file = file.split('/')[-1].split('.')[0]
         print(f'Loaded {file}')
         # Zero pixels
@@ -717,7 +717,7 @@ def draw_peak_clusters(files, n=12, format='png'):
         # Create directory
         os.makedirs(f'images/{file}/clusters/peaks', exist_ok=True)
 
-        #
+        # For each species clusterize peaks and draw a picture with clusterization
         for species in ['h', 'c', 'm']:
             # Take 1 species
             subset = matrix.query(f'species == "{species}"')
@@ -726,10 +726,10 @@ def draw_peak_clusters(files, n=12, format='png'):
             # Clustering
             clusters = kmeans_clustering(subset.T, n)
 
+            # Get necessary parameters for plotting
             xs, ys, rows, cols, width_height = light_plot_preparation(subset)
 
-
-
+            # For each cluster create superplot
             for i, cluster in clusters.items():
                 nrows, ncols, figsize = compute_layout(i, width_height)
                 f, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
@@ -741,9 +741,10 @@ def draw_peak_clusters(files, n=12, format='png'):
                     image[ys, xs] = subset.loc[:, cluster == j].sum(axis=1)
                     # 2 - minima of cluster number
                     ax[j].imshow(image)
-                    ax[j].title.set_text(f'{i} clusters k-means, cluster #{j}')
+                    ax[j].title.set_text(f'{i} clusters k-means\ncluster #{j}')
                 plt.savefig(f'images/{file}/clusters/peaks/kmeans_{species_to_name[species]}_clusters_{i}.{format}',
                             format=format)
+    plt.close('all')
 
 
 def light_plot_preparation(data):
@@ -758,7 +759,6 @@ def light_plot_preparation(data):
     cols = xs.max() + 1
     width_height = compute_width_height(xs, ys)
     return xs, ys, rows, cols, width_height
-
 
 
 
