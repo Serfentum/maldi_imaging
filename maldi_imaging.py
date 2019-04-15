@@ -771,6 +771,21 @@ def light_plot_preparation(data):
     return xs, ys, rows, cols, width_height
 
 
+def load_clusters(path):
+    """
+    Load dict with clusterization in json form from file
+    :param path: str - path to jsoned clustering
+    :return: {cluster: labels} - dict with clustering information
+    """
+    # Load json
+    with open('test4_2') as file:
+        clusters = json.load(file)
+
+    # Convert lists to np.array
+    clusters = {cluster: np.array(labels) for cluster, labels in clusters.items()}
+    return clusters
+
+
 # Example of usage
 if __name__ == '__main__':
     # Load matrix
