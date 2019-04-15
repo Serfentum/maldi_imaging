@@ -1,11 +1,12 @@
 import os
+import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 from sklearn.cluster import DBSCAN
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
 
 
 def load_matrix(path, sep='\t'):
@@ -319,7 +320,7 @@ def pixel_stats(matrix, threshold):
     return (pixel_intensity.describe(),
             number_of_intense_pixels / number_of_pixels,
             number_of_intense_pixels / (
-                        matrix.index.get_level_values('x').max() * matrix.index.get_level_values('y').max()))
+                    matrix.index.get_level_values('x').max() * matrix.index.get_level_values('y').max()))
 
 
 def difference(ion1, ion2):
@@ -648,6 +649,11 @@ def draw_clusters(data, path, name, n=12, format='png'):
     # Cluster data with cluster number [2, n)
     clusters = kmeans_clustering(data, n)
 
+    species = name.split('_')[1]
+    # Write clusterization to file
+    with open(f'{path}/area_clusters_{species_to_name[species]}.json', 'w') as file:
+        json.dump({cluster: labels.tolist() for cluster, labels in clusters}, file)
+
     # Preparations to plotting
     xs, ys, nrows, ncols, figsize, rows, cols = _auxiliary(data, n)
     # Plotting
@@ -667,7 +673,7 @@ species_to_name = {'h': 'human',
 
 def draw_area_clusters(files, n=12, format='png'):
     """
-    Draw area k-mean clusterization with number of clusters from 2 to n on 1 plot
+    Draw k-mean clusterization with number of clusters from 2 to n on 1 plot
     :param files: iterable - collection with full paths to a matrix files
     :param n: int - maximum number of clusters, 12 by default
     :param format: str - format of figure, png by default
@@ -692,7 +698,8 @@ def draw_area_clusters(files, n=12, format='png'):
             print(f'Working with {species} subset')
 
             # Clustering
-            draw_clusters(subset, f'images/{file}/clusters/area/', name=f'kmeans_{species_to_name[species]}_clusters.{format}',
+            draw_clusters(subset, f'images/{file}/clusters/area/',
+                          name=f'kmeans_{species_to_name[species]}_clusters.{format}',
                           n=n, format=format)
 
 
@@ -725,6 +732,9 @@ def draw_peak_clusters(files, n=12, format='png'):
 
             # Clustering
             clusters = kmeans_clustering(subset.T, n)
+            # Write clusterization to file
+            with open(f'images/{file}/clusters/peaks/peak_clusters_{species_to_name[species]}.json', 'w') as file:
+                json.dump({cluster: labels.tolist() for cluster, labels in clusters}, file)
 
             # Get necessary parameters for plotting
             xs, ys, rows, cols, width_height = light_plot_preparation(subset)
@@ -759,8 +769,6 @@ def light_plot_preparation(data):
     cols = xs.max() + 1
     width_height = compute_width_height(xs, ys)
     return xs, ys, rows, cols, width_height
-
-
 
 
 # Example of usage
