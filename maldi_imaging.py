@@ -778,7 +778,7 @@ def load_clusters(path):
     :return: {cluster: labels} - dict with clustering information
     """
     # Load json
-    with open('test4_2') as file:
+    with open(path) as file:
         clusters = json.load(file)
 
     # Convert lists to np.array
