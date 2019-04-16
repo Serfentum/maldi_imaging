@@ -649,10 +649,11 @@ def draw_clusters(data, path, name, n=12, format='png'):
     # Cluster data with cluster number [2, n)
     clusters = kmeans_clustering(data, n)
 
-    species = name.split('_')[1]
+    # Take 1st letter
+    species = name.split('_')[1][0]
     # Write clusterization to file
     with open(f'{path}/area_clusters_{species_to_name[species]}.json', 'w') as file:
-        json.dump({cluster: labels.tolist() for cluster, labels in clusters}, file)
+        json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, file)
 
     # Preparations to plotting
     xs, ys, nrows, ncols, figsize, rows, cols = _auxiliary(data, n)
@@ -734,7 +735,7 @@ def draw_peak_clusters(files, n=12, format='png'):
             clusters = kmeans_clustering(subset.T, n)
             # Write clusterization to file
             with open(f'images/{file}/clusters/peaks/peak_clusters_{species_to_name[species]}.json', 'w') as file:
-                json.dump({cluster: labels.tolist() for cluster, labels in clusters}, file)
+                json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, file)
 
             # Get necessary parameters for plotting
             xs, ys, rows, cols, width_height = light_plot_preparation(subset)
@@ -781,8 +782,8 @@ def load_clusters(path):
     with open(path) as file:
         clusters = json.load(file)
 
-    # Convert lists to np.array
-    clusters = {cluster: np.array(labels) for cluster, labels in clusters.items()}
+    # Convert cluster number to int and lists to np.array
+    clusters = {int(cluster): np.array(labels) for cluster, labels in clusters.items()}
     return clusters
 
 
