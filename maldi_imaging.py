@@ -9,14 +9,14 @@ from sklearn.cluster import DBSCAN
 from sklearn.cluster import KMeans, MiniBatchKMeans
 
 
-def load_matrix(path, sep='\t'):
+def load_matrix(path, sep='\t', **kwargs):
     """
     Loading matrix obtained after MALDIQuant library processing of .RAW files
     :param path: str - path to the matrix
     :param sep: str - field separator in file
     :return: df - pandas df with data
     """
-    matrix = pd.read_csv(path, sep=sep)
+    matrix = pd.read_csv(path, sep=sep, **kwargs)
     return matrix
 
 
@@ -541,8 +541,6 @@ to_rgb = {'#DC143C': [220, 20, 60],
 to_rgb = {k: [v / 255 for v in vs] for k, vs in to_rgb.items()}
 
 # Set of RGB colors to different clusters
-# crimson, gold, dark khaki, dark green, seagreen, navy, darkslateblue, purple, darkolivegreen, dodgerblue, indigo,
-# teal, lime
 colors = {2: ['#DC143C', '#FFD700'],
           3: ['#DC143C', '#FFD700', '#BDB76B'],
           4: ['#DC143C', '#FFD700', '#BDB76B', '#006400'],
@@ -559,6 +557,7 @@ colors = {2: ['#DC143C', '#FFD700'],
                '#1E90FF', '#4B0082', '#008080'],
           13: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F',
                '#1E90FF', '#4B0082', '#008080', '#00FF00']}
+# crimson, gold, dark khaki, dark green, seagreen, navy, darkslateblue, purple, darkolivegreen, dodgerblue, indigo, teal, lime
 # Set of normalized rgb values
 colors_rgb = {k: [to_rgb[v] for v in vs] for k, vs in colors.items()}
 
@@ -659,8 +658,8 @@ def draw_clusters(data, path, name, n=12, format='png'):
 
     os.makedirs(path, exist_ok=True)
     # Write clusterization to file
-    with open(f'{path}/area_clusters_{species_to_name[species]}.json', 'w') as file:
-        json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, file)
+    with open(f'{path}/area_clusters_{species_to_name[species]}.json', 'w') as dest:
+        json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, dest)
 
     # Preparations to plotting
     xs, ys, nrows, ncols, figsize, rows, cols = _auxiliary(data, n)
@@ -668,7 +667,7 @@ def draw_clusters(data, path, name, n=12, format='png'):
     _draw_clusters(clusters, xs, ys, nrows, ncols, figsize, rows, cols)
 
     # Save figure and close everything
-    plt.savefig(f'{path}/{name}.{format}', format=format)
+    plt.savefig(f'{path}/{name}', format=format)
     plt.close()
 
 
@@ -710,6 +709,38 @@ def draw_area_clusters(files, n=12, format='png'):
                           n=n, format=format)
 
 
+def draw_clean_area_clusters(files, n=12, format='png', **kwargs):
+    """
+    Draw k-mean clusterization with number of clusters from 2 to n on 1 plot
+    :param files: iterable - collection with full paths to a matrix files
+    :param n: int - maximum number of clusters, 12 by default
+    :param format: str - format of figure, png by default
+    :return:
+    """
+    for file in files:
+        # Load data
+        matrix = load_matrix(f'{file}', **kwargs)
+        print(f'Loaded {file}')
+
+        # Get name of file without extension
+        file = file.split('/')[-1].split('.')[0]
+
+        # Zero pixels
+        zeros(matrix)
+        # Multiindex
+        reindexing(matrix)
+
+        for species in ['h', 'c', 'm']:
+            # Get data for 1 species
+            subset = matrix.query(f'species == "{species}"')
+            print(f'Working with {species} subset')
+
+            # Clustering
+            draw_clusters(subset, f'cleaned_images/{file}/clusters/area/',
+                          name=f'kmeans_{species_to_name[species]}_clusters.{format}',
+                          n=n, format=format)
+
+
 def draw_peak_clusters(files, n=12, format='png'):
     """
     Draw peak k-mean clusterization with number of clusters from 2 to n. There is a picture with all
@@ -740,8 +771,8 @@ def draw_peak_clusters(files, n=12, format='png'):
             # Clustering
             clusters = kmeans_clustering(subset.T, n)
             # Write clusterization to file
-            with open(f'images/{file}/clusters/peaks/peak_clusters_{species_to_name[species]}.json', 'w') as file:
-                json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, file)
+            with open(f'images/{file}/clusters/peaks/peak_clusters_{species_to_name[species]}.json', 'w') as dest:
+                json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, dest)
 
             # Get necessary parameters for plotting
             xs, ys, rows, cols, width_height = light_plot_preparation(subset)
@@ -785,8 +816,8 @@ def load_clusters(path):
     :return: {cluster: labels} - dict with clustering information
     """
     # Load json
-    with open(path) as file:
-        clusters = json.load(file)
+    with open(path) as dest:
+        clusters = json.load(dest)
 
     # Convert cluster number to int and lists to np.array
     clusters = {int(cluster): np.array(labels) for cluster, labels in clusters.items()}
