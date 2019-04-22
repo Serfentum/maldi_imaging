@@ -34,7 +34,7 @@ def zeros(matrix):
     # Which pixels have all intensities equal to 0
     is_blank_pixel = (pixel_zero_num == matrix.shape[1])
     # No totally blank pixels if pass
-    assert not is_blank_pixel.any(), 'There are some blank pixels'
+    # assert not is_blank_pixel.any(), 'There are some blank pixels'
 
     # Number of pixels which have 0 intensity for ions
     mz_zero_num = elem_is_zero.sum()
@@ -42,7 +42,7 @@ def zeros(matrix):
     # Which ions have intensity equal to 0 in all pixels
     is_blank_mz = (mz_zero_num == matrix.shape[0])
     # No totally blank mz if it pass
-    assert not is_blank_mz.any(), print('There are some blank mz')
+    # assert not is_blank_mz.any(), print('There are some blank mz')
 
 
 def reindexing(matrix):
@@ -727,8 +727,6 @@ def draw_clean_area_clusters(files, n=12, format='png', **kwargs):
 
         # Zero pixels
         zeros(matrix)
-        # Multiindex
-        reindexing(matrix)
 
         for species in ['h', 'c', 'm']:
             # Get data for 1 species
@@ -822,6 +820,113 @@ def load_clusters(path):
     # Convert cluster number to int and lists to np.array
     clusters = {int(cluster): np.array(labels) for cluster, labels in clusters.items()}
     return clusters
+
+
+def mask_dirt_area(matrix, dirt_clusters, clustering):
+    """
+    Compose mask to get clean area
+    :param matrix: df - dataframe with 1 species
+    :param dirt_clusters: iterable - collection with # of dirt clusters
+    :param clustering: array - 1d int array with cluster labels
+    :return: array - 1d boolean array where True corresponds to clean pixels
+    """
+    # All pixels are initialized as clean
+    p = np.ones(matrix.shape[0], dtype=bool)
+    # Obtain mask for clean area, that is mask out dirt
+    for c in dirt_clusters:
+        p ^= clustering == c
+    return p
+
+
+def mask_dirt_peaks(matrix, dirt_clusters, clustering):
+    """
+    Compose mask to get clean peaks
+    :param matrix: df - dataframe with 1 species
+    :param dirt_clusters: iterable - collection with # of dirt clusters
+    :param clustering: array - 1d int array with cluster labels
+    :return: array - 1d boolean array where True corresponds to clean peaks
+    """
+    # All peaks are initialized as clean
+    p = np.ones(matrix.shape[1], dtype=bool)
+    # Obtain mask for clean peaks, that is mask out dirt
+    for c in dirt_clusters:
+        p ^= clustering == c
+    return p
+
+
+def dummy_peak_draw(matrix, n=1, clustering=None):
+    """
+    Draw picture of matrix or panel with peak clusters with summed peak intensities
+    :param matrix: df - dataframe with 1 species
+    :param n: int - number of clusters
+    :param clustering: dict - dictionary with peak clustering scheme
+    :return:
+    """
+    # Get necessary parameters for plotting
+    xs, ys, rows, cols, width_height = light_plot_preparation(matrix)
+
+    # Draw each subplot
+    if clustering:
+        # Preparation
+        nrows, ncols, figsize = compute_layout(n, width_height)
+        f, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+        ax = ax.ravel()
+
+        for j in range(n):
+            image = np.zeros((rows, cols))
+            image[ys, xs] = matrix.loc[:, clustering[n] == j].sum(axis=1)
+            ax[j].imshow(image)
+            ax[j].set_title(f'cluster #{j}', {'fontsize': 35})
+
+    # Draw summary intensity
+    else:
+        image = np.zeros((rows, cols))
+        image[ys, xs] = matrix.sum(axis=1)
+        plt.imshow(image)
+
+
+def dummy_area_draw(matrix, n=1, clustering=None):
+    """
+    Draw picture of matrix or panel with area clusters
+    :param matrix: df - dataframe with 1 species
+    :param n: int - number of clusters
+    :param clustering: dict - dictionary with area clustering scheme
+    :return:
+    """
+    # Get necessary parameters for plotting
+    xs, ys, rows, cols, width_height = light_plot_preparation(matrix)
+
+    # Draw each subplot
+    if clustering:
+        # Preparation
+        nrows, ncols, figsize = compute_layout(n, width_height)
+        f, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+        ax = ax.ravel()
+
+        for j in range(n):
+            # xs and ys are different each time
+            xs, ys, rows, cols, _ = light_plot_preparation(matrix.loc[clustering[n] == j])
+            # Create image
+            image = np.zeros((rows, cols))
+            image[ys, xs] = 1
+            ax[j].imshow(image)
+            ax[j].set_title(f'cluster #{j}', {'fontsize': 35})
+
+    # Draw matrix
+    else:
+        # Create image
+        image = np.zeros((rows, cols))
+        image[ys, xs] = 1
+        plt.imshow(image)
+
+
+def normalization_tic(matrix):
+    """
+    Normalize matrix with TIC method - divide everything by matrix sum
+    :param matrix: df - dataframe with 1 species
+    :return: df - TIC normalized df
+    """
+    return matrix / matrix.sum().sum()
 
 
 # Example of usage
