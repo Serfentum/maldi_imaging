@@ -534,12 +534,15 @@ to_rgb = {'#DC143C': [220, 20, 60],
           '#556B2F': [85, 107, 47],
           '#1E90FF': [30, 144, 255],
           '#4B0082': [75, 0, 130],
-          '#008080': [0, 128, 128]}
+          '#008080': [0, 128, 128],
+          '#00FF00': [0, 255, 0]}
 
 # From RGB hex to normalized values
 to_rgb = {k: [v / 255 for v in vs] for k, vs in to_rgb.items()}
 
 # Set of RGB colors to different clusters
+# crimson, gold, dark khaki, dark green, seagreen, navy, darkslateblue, purple, darkolivegreen, dodgerblue, indigo,
+# teal, lime
 colors = {2: ['#DC143C', '#FFD700'],
           3: ['#DC143C', '#FFD700', '#BDB76B'],
           4: ['#DC143C', '#FFD700', '#BDB76B', '#006400'],
@@ -553,7 +556,9 @@ colors = {2: ['#DC143C', '#FFD700'],
           11: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F',
                '#1E90FF', '#4B0082'],
           12: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F',
-               '#1E90FF', '#4B0082', '#008080']}
+               '#1E90FF', '#4B0082', '#008080'],
+          13: ['#DC143C', '#FFD700', '#BDB76B', '#006400', '#2E8B57', '#000080', '#483D8B', '#800080', '#556B2F',
+               '#1E90FF', '#4B0082', '#008080', '#00FF00']}
 # Set of normalized rgb values
 colors_rgb = {k: [to_rgb[v] for v in vs] for k, vs in colors.items()}
 
@@ -651,6 +656,8 @@ def draw_clusters(data, path, name, n=12, format='png'):
 
     # Take 1st letter
     species = name.split('_')[1][0]
+
+    os.makedirs(path, exist_ok=True)
     # Write clusterization to file
     with open(f'{path}/area_clusters_{species_to_name[species]}.json', 'w') as file:
         json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, file)
@@ -661,7 +668,6 @@ def draw_clusters(data, path, name, n=12, format='png'):
     _draw_clusters(clusters, xs, ys, nrows, ncols, figsize, rows, cols)
 
     # Save figure and close everything
-    os.makedirs(path, exist_ok=True)
     plt.savefig(f'{path}/{name}.{format}', format=format)
     plt.close()
 
