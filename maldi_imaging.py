@@ -33,16 +33,19 @@ def zeros(matrix):
 
     # Which pixels have all intensities equal to 0
     is_blank_pixel = (pixel_zero_num == matrix.shape[1])
-    # No totally blank pixels if pass
-    # assert not is_blank_pixel.any(), 'There are some blank pixels'
+
+    # Remove blank pixels
+    matrix = matrix.loc[~is_blank_pixel]
 
     # Number of pixels which have 0 intensity for ions
     mz_zero_num = elem_is_zero.sum()
 
     # Which ions have intensity equal to 0 in all pixels
     is_blank_mz = (mz_zero_num == matrix.shape[0])
-    # No totally blank mz if it pass
-    # assert not is_blank_mz.any(), print('There are some blank mz')
+
+    # Remove blank peaks
+    matrix = matrix.loc[:, ~is_blank_mz]
+    return matrix
 
 
 def reindexing(matrix):
@@ -725,8 +728,8 @@ def draw_clean_area_clusters(files, n=12, format='png', **kwargs):
         # Get name of file without extension
         file = file.split('/')[-1].split('.')[0]
 
-        # Zero pixels
-        zeros(matrix)
+        # Remove all-zero elements
+        matrix = zeros(matrix)
 
         for species in ['h', 'c', 'm']:
             # Get data for 1 species
@@ -820,6 +823,12 @@ def load_clusters(path):
     # Convert cluster number to int and lists to np.array
     clusters = {int(cluster): np.array(labels) for cluster, labels in clusters.items()}
     return clusters
+
+
+def dump_dirt(matrix, clean_peaks, probe_more_intense, path='../matrices/dirt/run4_p2/macaque.json'):
+    with open(path, 'w') as dest:
+        json.dump(matrix.columns[~clean_peaks].tolist(), dest)
+        # TODO add dirt from 2nd stage
 
 
 def mask_dirt_area(matrix, dirt_clusters, clustering):
@@ -927,6 +936,18 @@ def normalization_tic(matrix):
     :return: df - TIC normalized df
     """
     return matrix / matrix.sum().sum()
+
+
+def load_dirt(path):
+    """
+    Load json with mz
+    :param path: str - path to json with mz
+    :return: index - pd index with dirty mz
+    """
+    with open(path) as file:
+        dirt_mz = json.load(file)
+    dirt_mz = pd.Float64Index(dirt_mz)
+    return dirt_mz
 
 
 # Example of usage
