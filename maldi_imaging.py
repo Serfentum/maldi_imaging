@@ -916,12 +916,12 @@ def clean_area(matrix, dirt_area_clusters, clustering):
     :param clustering: array - 1d int array with cluster labels
     :return: df, series - df with cleaned area and boolean series with marks about peaks intensity in 2 zones
     """
-    # Get clean pixels
-    clean_area = mask_dirt_area(matrix, dirt_area_clusters, clustering)
+    # Get info whether pixels are clean
+    area_cleaned = mask_dirt_area(matrix, dirt_area_clusters, clustering)
 
     # Get rid of dirt area
-    area_cleaned = matrix.loc[clean_area]
-    area_dirt = matrix.loc[~clean_area]
+    area_cleaned = matrix.loc[area_cleaned]
+    area_dirt = matrix.loc[~area_cleaned]
 
     # Find peaks which are more intense in sample than in matrix
     more_intense_in_probe = 10 * area_dirt.mean() < area_cleaned.mean()
@@ -929,6 +929,26 @@ def clean_area(matrix, dirt_area_clusters, clustering):
     # Filter out matrix peaks
     area_cleaned = area_cleaned.loc[:, more_intense_in_probe]
     return area_cleaned, more_intense_in_probe
+
+
+def clean_peaks(matrix, dirt_peak_clusters, clustering):
+    """
+    Clean matrix from dirty peaks whose clusters are in dirt_peak_clusters
+    :param matrix: df - df with 1 species
+    :param dirt_area_clusters: iterable - collection with # of dirt clusters
+    :param clustering: array - 1d int array with cluster labels
+    :return: index, index - mz of clean peaks and mz of dirt peaks
+    """
+    # Get info whether peaks are clean
+    is_clean_peaks = mask_dirt_peaks(matrix, dirt_peak_clusters, clustering)
+
+    # Get clean peaks
+    peaks_cleaned = matrix.columns[is_clean_peaks]
+
+    # Get dirt peaks
+    dirt_peaks = matrix.columns[~matrix.columns.isin(peaks_cleaned)]
+
+    return peaks_cleaned, dirt_peaks
 
 
 def dummy_area_draw(matrix, n=1, clustering=None):
