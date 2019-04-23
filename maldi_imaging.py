@@ -728,8 +728,8 @@ def draw_clean_area_clusters(files, n=12, format='png', **kwargs):
         # Get name of file without extension
         file = file.split('/')[-1].split('.')[0]
 
-        # Remove all-zero elements
-        matrix = zeros(matrix)
+        # Zero pixels
+        zeros(matrix)
 
         for species in ['h', 'c', 'm']:
             # Get data for 1 species
@@ -825,10 +825,23 @@ def load_clusters(path):
     return clusters
 
 
-def dump_dirt(matrix, clean_peaks, probe_more_intense, path='../matrices/dirt/run4_p2/macaque.json'):
+def dump_dirt(dirt_peaks, more_intense_in_probe, path='../matrices/dirt/run4_p2/macaque.json'):
+    """
+    Write dirty mz to a json
+    :param dirt_peaks: Float64Index - mz of peaks from dirt clusters
+    :param more_intense_in_probe: series - boolean series with mz index of original df
+    :param path: str - where to save file
+    :return:
+    """
+    # Get mz of dirt peaks, who too intense in a matrix
+    intensive_dirt_peaks = more_intense_in_probe.index[~more_intense_in_probe]
+
+    # Unite peaks from dirt clusters and those who too intense in a matrix
+    all_dirt = intensive_dirt_peaks.union(dirt_peaks)
+
+    # Write dirt to a file
     with open(path, 'w') as dest:
-        json.dump(matrix.columns[~clean_peaks].tolist(), dest)
-        # TODO add dirt from 2nd stage
+        json.dump(all_dirt.tolist(), dest)
 
 
 def mask_dirt_area(matrix, dirt_clusters, clustering):
