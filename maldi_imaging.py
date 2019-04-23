@@ -907,6 +907,30 @@ def dummy_peak_draw(matrix, n=1, clustering=None):
         plt.imshow(image)
 
 
+def clean_area(matrix, dirt_area_clusters, clustering):
+    """
+    Clean matrix from dirty pixels whose clusters are in dirt_area_clusters and from dirty peaks which are
+    too intense in matrix
+    :param matrix: df - df with 1 species
+    :param dirt_area_clusters: iterable - collection with # of dirt clusters
+    :param clustering: array - 1d int array with cluster labels
+    :return: df, series - df with cleaned area and boolean series with marks about peaks intensity in 2 zones
+    """
+    # Get clean pixels
+    clean_area = mask_dirt_area(matrix, dirt_area_clusters, clustering)
+
+    # Get rid of dirt area
+    area_cleaned = matrix.loc[clean_area]
+    area_dirt = matrix.loc[~clean_area]
+
+    # Find peaks which are more intense in sample than in matrix
+    more_intense_in_probe = 10 * area_dirt.mean() < area_cleaned.mean()
+
+    # Filter out matrix peaks
+    area_cleaned = area_cleaned.loc[:, more_intense_in_probe]
+    return area_cleaned, more_intense_in_probe
+
+
 def dummy_area_draw(matrix, n=1, clustering=None):
     """
     Draw picture of matrix or panel with area clusters
