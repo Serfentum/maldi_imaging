@@ -336,6 +336,16 @@ def difference(ion1, ion2):
     return abs(ion1 - ion2) / ion1
 
 
+def absolute_recalibration(mzs, shift):
+    """
+    Recalibrate mz by specified value - mz + shift, e.g. 500 + 2
+    :param mzs: number or series - mz which will be recalibrated
+    :param shift: number - daltons which will be added to mzs
+    :return: recalibrated mzs
+    """
+    return mzs + shift
+
+
 def merge_peaks(ion1, ion2, intensity1, intensity2):
     """
     Merge 2 peaks together, averaging their mz and summing intensity
@@ -395,8 +405,8 @@ def merge_df(matrix, ppm):
     for mz in matrix.columns[1:]:
         current_int = matrix[mz]
 
-        if difference(merged[-1], mz) <= ppm:
-            merged[-1], intensities[-1] = merge(merged[-1], mz, intensities[-1], current_int)
+        if difference(merged[-1], mz) <= ppm: # change to merge_peaks probably
+            merged[-1], intensities[-1] = merge_peaks(merged[-1], mz, intensities[-1], current_int)
         else:
             merged.append(mz)
             intensities.append(current_int)
@@ -465,7 +475,7 @@ def naive_align_peaks(lcms, matrix, threshold=5):
 
 def get_ratio(intensities1, intensities2):
     """
-    Get ratio of corresponding intensities from intensities1 and intensities2
+    Get log2 ratio of corresponding intensities from intensities1 and intensities2
     :param intensities1: iterable - collection with intensities in a form of series or scalar
     :param intensities2: iterable - collection with intensities in a form of series or scalar
     :return: list - list with ratios of corresponding intensities
@@ -474,7 +484,7 @@ def get_ratio(intensities1, intensities2):
 
     # Iterate over each intensity and divide 1st on the 2nd
     for ints1, ints2 in zip(intensities1, intensities2):
-        ratios.append(ints1 / ints2)
+        ratios.append(np.log2(ints1 / ints2))
     return ratios
 
 
@@ -539,16 +549,19 @@ def align(lcms, maldi):
     LC and MALDI
     :param lcms: df - df with LC data
     :param maldi: df - df with all MALDI data
-    :return: list - list with human/chimp and human/macaque correlations between LC and MALDI
+    :return: tuple - (list, int) with human/chimp and human/macaque correlations between LC and MALDI and
+    number of aligned peaks
     """
     # Align peaks
     aligned_matrix, renaming = naive_align_peaks(lcms, maldi)
 
-    # TODO ask Katya where this addition is right or should it be applied to each species mean
     # Find minimum
     pseudo = aligned_matrix[aligned_matrix > 0].min().min()
     # Add minimum to get rid of zeros
     aligned_matrix += pseudo
+
+    # Log transform MALDI data
+    aligned_matrix = logarithmize_maldi(aligned_matrix)
 
     # Separate species and compute mean for them
     human_lca, chimp_lca, macaque_lca, human_maldi, chimp_maldi, macaque_maldi = subsetting_mean(lcms, aligned_matrix,
@@ -559,8 +572,17 @@ def align(lcms, maldi):
         [human_maldi, human_maldi, human_lca, human_lca],
         [chimp_maldi, macaque_maldi, chimp_lca, macaque_lca])
 
-    # Corrs
-    return get_correlations([human_chimp_maldi, human_macaque_maldi], [human_chimp_lc, human_macaque_lc])
+    # Correlations between data subsets and number of aligned peaks
+    return get_correlations([human_chimp_maldi, human_macaque_maldi], [human_chimp_lc, human_macaque_lc]), len(renaming)
+
+
+def logarithmize_maldi(maldi):
+    """
+    Log2 transformation
+    :param maldi: df - dataframe with intensity data
+    :return: df - log transformed df
+    """
+    return np.log2(maldi)
 
 
 def recalibrate_align(lcms, maldi, span):
@@ -576,8 +598,14 @@ def recalibrate_align(lcms, maldi, span):
 
     # For each mz shift recalibrate MALDI and compute correlations
     for i in range(*span):
-        maldi.columns = original_mz / (1 - i * 1e-6)
-        correlations.append(align(lcms, maldi))
+        maldi.columns = absolute_recalibration(original_mz, i)
+        tup = align(lcms, maldi)
+        result = tup[0]
+        result.append(tup[1])
+        correlations.append(result)
+
+    # Restore original columns in maldi dataset
+    maldi.columns = original_mz
     return correlations
 
 
