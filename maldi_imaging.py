@@ -338,12 +338,22 @@ def difference(ion1, ion2):
 
 def absolute_recalibration(mzs, shift):
     """
-    Recalibrate mz by specified value - mz + shift, e.g. 500 + 2
+    Recalibrate mz by specified value - mz + shift, e.g. 500 + 2, 1000 + 2
     :param mzs: number or series - mz which will be recalibrated
     :param shift: number - daltons which will be added to mzs
     :return: recalibrated mzs
     """
     return mzs + shift
+
+
+def relative_recalibration(mzs, ppm):
+    """
+    Recalibrate mz by ppm - mz / (1 - ppm), e.g. 500 + 0.01, 1000 + 0.02
+    :param mzs: number or series - mz which will be recalibrated
+    :param ppm: number - ppm which will be added to mzs
+    :return: recalibrated mzs
+    """
+    return mzs / (1 - ppm * 1e-6)
 
 
 def merge_peaks(ion1, ion2, intensity1, intensity2):
@@ -405,7 +415,7 @@ def merge_df(matrix, ppm):
     for mz in matrix.columns[1:]:
         current_int = matrix[mz]
 
-        if difference(merged[-1], mz) <= ppm: # change to merge_peaks probably
+        if difference(merged[-1], mz) <= ppm:
             merged[-1], intensities[-1] = merge_peaks(merged[-1], mz, intensities[-1], current_int)
         else:
             merged.append(mz)
@@ -436,6 +446,14 @@ def matrix_to_mz_intensities(matrix):
 
 
 def load_maldi_lc(lcms, matrix):
+    """
+    Load LC dataset and MALDI dataset
+    # todo - obsolete due to already written reindexed maldi matrix, rewrite
+    # todo can preprocess lc (mz as index) and maldi (columns to float type)
+    :param lcms: str - path to LC dataset
+    :param matrix: str - path to MALDI dataset
+    :return: (df, df) - tuple with LC dataframe and reindexed MALDI dataframe
+    """
     lcms = pd.read_csv(lcms, sep='\t', index_col=0)
     matrix = pd.read_csv(matrix, sep='\t')
 
@@ -475,30 +493,32 @@ def naive_align_peaks(lcms, matrix, threshold=5):
 
 def get_ratio(intensities1, intensities2):
     """
-    Get log2 ratio of corresponding intensities from intensities1 and intensities2
+    Get ratio of corresponding log transformed intensities from intensities1 and intensities2
     :param intensities1: iterable - collection with intensities in a form of series or scalar
     :param intensities2: iterable - collection with intensities in a form of series or scalar
     :return: list - list with ratios of corresponding intensities
     """
     ratios = []
 
-    # Iterate over each intensity and divide 1st on the 2nd
+    # Iterate over each intensity and subtract 2nd from the 1st
     for ints1, ints2 in zip(intensities1, intensities2):
-        ratios.append(np.log2(ints1 / ints2))
+        ratios.append(ints1 - ints2)
     return ratios
 
 
 def get_correlations(intensities1, intensities2):
     """
-    Compute correlations of corresponding intensities from intensities1 and intensities2
+    Compute Pearson and Spearman correlations of corresponding intensities from intensities1 and intensities2
     :param intensities1: series - series with intensities
     :param intensities2: series - series with intensities
-    :return: list - list with correlations between pairs of intensity series
+    :return: list - list with Pearson and Spearman correlations between pairs of intensity series
     """
     corrs = []
 
+    # Compute correlation for corresponding intensities
     for ints1, ints2 in zip(intensities1, intensities2):
-        corrs.append(ints1.corr(ints2))
+        corrs.extend((ints1.corr(ints2, method='pearson'),
+                      ints1.corr(ints2, method='spearman')))
     return corrs
 
 
@@ -564,8 +584,8 @@ def align(lcms, maldi):
     aligned_matrix = logarithmize_maldi(aligned_matrix)
 
     # Separate species and compute mean for them
-    human_lca, chimp_lca, macaque_lca, human_maldi, chimp_maldi, macaque_maldi = subsetting_mean(lcms, aligned_matrix,
-                                                                                                 renaming)
+    human_lca, chimp_lca, macaque_lca, human_maldi, chimp_maldi, macaque_maldi = \
+        subsetting_mean(lcms, aligned_matrix, renaming)
 
     # Get ratios of species intensities
     human_chimp_maldi, human_macaque_maldi, human_chimp_lc, human_macaque_lc = get_ratio(
@@ -585,29 +605,39 @@ def logarithmize_maldi(matrix):
     return np.log2(matrix)
 
 
-def recalibrate_align(lcms, maldi, span):
+def recalibrate_align(lcms, maldi, span, method='absolute'):
     """
-    Compute correlations between MALDI and LC with different MALDI recalibrations
+    Compute Pearson and Spearman correlations between MALDI and LC with different MALDI recalibrations
     :param lcms: df - df with LC data
     :param maldi: df - df with all MALDI data
     :param span: tuple - minimal and maximal shifts and step in MALDI mz
-    :return: list - list with correlations in case of all shifts
+    :param method: str - method to use for mz recalibration - one of {'absolute', 'relative'}, absolute is default
+    :return: list - list with Pearson and Spearman correlations and number of aligned peaks for all shifts
     """
+    # Prepare container
     correlations = []
+    # Save original mz values
     original_mz = maldi.columns
 
     # For each mz shift recalibrate MALDI and compute correlations
     for i in np.arange(*span):
-        maldi.columns = absolute_recalibration(original_mz, i)
+        # Recalibrate
+        maldi.columns = recalibration[method](original_mz, i)
+        # Align peaks
         corr, npeaks = align(lcms, maldi)
-        corr.append(npeaks)
 
+        # Also count number of peaks
+        corr.append(npeaks)
         correlations.append(corr)
 
     # Restore original columns in maldi dataset
     maldi.columns = original_mz
     return correlations
 
+
+# From method name to function for mz recalibration
+recalibration = {'absolute': absolute_recalibration,
+                 'relative': relative_recalibration}
 
 # From RGB hex to decimal values
 to_rgb = {'#DC143C': [220, 20, 60],
