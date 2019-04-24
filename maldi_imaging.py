@@ -576,13 +576,13 @@ def align(lcms, maldi):
     return get_correlations([human_chimp_maldi, human_macaque_maldi], [human_chimp_lc, human_macaque_lc]), len(renaming)
 
 
-def logarithmize_maldi(maldi):
+def logarithmize_maldi(matrix):
     """
-    Log2 transformation
-    :param maldi: df - dataframe with intensity data
+    Log2 transformation of matrix
+    :param matrix: df - dataframe with intensity data
     :return: df - log transformed df
     """
-    return np.log2(maldi)
+    return np.log2(matrix)
 
 
 def recalibrate_align(lcms, maldi, span):
@@ -590,19 +590,19 @@ def recalibrate_align(lcms, maldi, span):
     Compute correlations between MALDI and LC with different MALDI recalibrations
     :param lcms: df - df with LC data
     :param maldi: df - df with all MALDI data
-    :param span: tuple - minimal and maximal shifts in MALDI mz
+    :param span: tuple - minimal and maximal shifts and step in MALDI mz
     :return: list - list with correlations in case of all shifts
     """
     correlations = []
     original_mz = maldi.columns
 
     # For each mz shift recalibrate MALDI and compute correlations
-    for i in range(*span):
+    for i in np.arange(*span):
         maldi.columns = absolute_recalibration(original_mz, i)
-        tup = align(lcms, maldi)
-        result = tup[0]
-        result.append(tup[1])
-        correlations.append(result)
+        corr, npeaks = align(lcms, maldi)
+        corr.append(npeaks)
+
+        correlations.append(corr)
 
     # Restore original columns in maldi dataset
     maldi.columns = original_mz
