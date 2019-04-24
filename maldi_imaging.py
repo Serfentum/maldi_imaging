@@ -435,17 +435,25 @@ def load_maldi_lc(lcms, matrix):
 
 
 def naive_align_peaks(lcms, matrix, threshold=5):
+    """
+    Align peaks from MALDI matrix on LCMS
+    :param lcms: df - df with LC data, where mz is an index
+    :param matrix: df - df with all MALDI data, where columns are mz floats
+    :param threshold: float - number of difference between MALDI and LC peaks mz in ppm, which can be still aligned
+    :return: df, dict - MALDI matrix with aligned renamed peaks and dictionary with correspondence between old MALDI
+    and LC peak
+    """
     # Convert ppm to fraction
     threshold *= 1e-6
 
     # Get relative differences between each ion in LC and MALDI
-    lc_diffs = {lc: {(m, difference(lc, m)) for m in matrix.columns} for lc in lcms.mz}
+    lc_diffs = {lc: {(m, difference(lc, m)) for m in matrix.columns} for lc in lcms.index}
     # Get only mz with minimal ppm difference - will contains only 1 variant for ion
     lc_diffs = {lc: min(diffs, key=lambda x: x[1]) for lc, diffs in lc_diffs.items()}
     # Filter out peaks with relative difference > than 5ppm
     lc_diffs = {lc: diff for lc, diff in lc_diffs.items() if diff[1] <= threshold}
 
-    # Dictionary with correspondance between MALDI and LC aligned peaks
+    # Dictionary with correspondence between MALDI and LC aligned peaks
     renaming = {m: lc for lc, (m, _) in lc_diffs.items()}
     print(f'Number of aligned peaks is {len(renaming)}')
 
@@ -478,6 +486,7 @@ def get_correlations(intensities1, intensities2):
     :return: list - list with correlations between pairs of intensity series
     """
     corrs = []
+
     for ints1, ints2 in zip(intensities1, intensities2):
         corrs.append(ints1.corr(ints2))
     return corrs
@@ -486,12 +495,11 @@ def get_correlations(intensities1, intensities2):
 def subsetting_mean(lcms, matrix, renaming):
     # todo generalize
     """
-    Take groups from LC and MALDI and return mean for each peak in each group
-    :param matrix: df - df with all data
+    Divide MALDI and LC by species, return mean of each group
+    :param lcms: df - df with lc data, where mz is an index
+    :param matrix: df - df with all maldi data
     :return: (series, series, series, series, series, series) - tuple of series with mean for each group
     """
-    # Use mz as an index
-    lcms.set_index('mz', inplace=True)
 
     # Get species subsets of LC
     human_lc = lcms.filter(regex=r'_H[ABCD]')
@@ -523,6 +531,54 @@ def subsetting_mean(lcms, matrix, renaming):
     chimp_maldi = chimp_maldi.mean()
     macaque_maldi = macaque_maldi.mean()
     return human_lca, chimp_lca, macaque_lca, human_maldi, chimp_maldi, macaque_maldi
+
+
+def align(lcms, maldi):
+    """
+    Align peaks from MALDI on LCMS, get species and compute correlation of human/chimp and human/macaque ratios between
+    LC and MALDI
+    :param lcms: df - df with LC data
+    :param maldi: df - df with all MALDI data
+    :return: list - list with human/chimp and human/macaque correlations between LC and MALDI
+    """
+    # Align peaks
+    aligned_matrix, renaming = naive_align_peaks(lcms, maldi)
+
+    # TODO ask Katya where this addition is right or should it be applied to each species mean
+    # Find minimum
+    pseudo = aligned_matrix[aligned_matrix > 0].min().min()
+    # Add minimum to get rid of zeros
+    aligned_matrix += pseudo
+
+    # Separate species and compute mean for them
+    human_lca, chimp_lca, macaque_lca, human_maldi, chimp_maldi, macaque_maldi = subsetting_mean(lcms, aligned_matrix,
+                                                                                                 renaming)
+
+    # Get ratios of species intensities
+    human_chimp_maldi, human_macaque_maldi, human_chimp_lc, human_macaque_lc = get_ratio(
+        [human_maldi, human_maldi, human_lca, human_lca],
+        [chimp_maldi, macaque_maldi, chimp_lca, macaque_lca])
+
+    # Corrs
+    return get_correlations([human_chimp_maldi, human_macaque_maldi], [human_chimp_lc, human_macaque_lc])
+
+
+def recalibrate_align(lcms, maldi, span):
+    """
+    Compute correlations between MALDI and LC with different MALDI recalibrations
+    :param lcms: df - df with LC data
+    :param maldi: df - df with all MALDI data
+    :param span: tuple - minimal and maximal shifts in MALDI mz
+    :return: list - list with correlations in case of all shifts
+    """
+    correlations = []
+    original_mz = maldi.columns
+
+    # For each mz shift recalibrate MALDI and compute correlations
+    for i in range(*span):
+        maldi.columns = original_mz / (1 - i * 1e-6)
+        correlations.append(align(lcms, maldi))
+    return correlations
 
 
 # From RGB hex to decimal values
@@ -917,11 +973,11 @@ def clean_area(matrix, dirt_area_clusters, clustering):
     :return: df, series - df with cleaned area and boolean series with marks about peaks intensity in 2 zones
     """
     # Get info whether pixels are clean
-    area_cleaned = mask_dirt_area(matrix, dirt_area_clusters, clustering)
+    cleaned_area = mask_dirt_area(matrix, dirt_area_clusters, clustering)
 
     # Get rid of dirt area
-    area_cleaned = matrix.loc[area_cleaned]
-    area_dirt = matrix.loc[~area_cleaned]
+    area_cleaned = matrix.loc[cleaned_area]
+    area_dirt = matrix.loc[~cleaned_area]
 
     # Find peaks which are more intense in sample than in matrix
     more_intense_in_probe = 10 * area_dirt.mean() < area_cleaned.mean()
