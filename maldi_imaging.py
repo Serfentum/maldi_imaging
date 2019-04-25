@@ -279,6 +279,41 @@ def draw_species_panels(matrix_path, path, species='h', span=(500, 1501), format
             draw_panel(selected_data, xs, ys, ions, width_height=width_height, save=True, path=path, format=format)
 
 
+def reindexed_draw_species_panels(matrix_path, path, species='h', span=(500, 1501), format='png'):
+    """
+    Draw array of images with ion intensities from ions on picture as a panel for all ion groups for specified species.
+    Use it for already reindexed matrices
+    :param matrix_path: str - path to the reindexed matrix
+    :param path: str - path to directory to save images
+    :param species: str - species to select from the matrix
+    :param span: tuple - from which to which
+    :param format: str - format of image, 'png' by default
+    :return:
+    """
+    # Load matrix
+    matrix = load_matrix(matrix_path, sep='\t', index_col=[0, 1, 2])
+
+    # Take only 1 species
+    selected_data = matrix.query(f'species == "{species}"')
+
+    # Pixel coordinates
+    xs, ys = get_coords(selected_data)
+
+    # Width and height of each panel
+    width_height = compute_width_height(xs, ys)
+
+    # Iterate over ion groups in df columns and draw panel of them
+    for i, ion_group in enumerate(range(*span)):
+        if i % 10 == 0:
+            print(f'{ion_group} processing')
+
+        # Take ions
+        ions = selected_data.filter(regex=rf'^{ion_group}.*').columns
+        # Don't draw if there is no ions in this group
+        if ions.size:
+            draw_panel(selected_data, xs, ys, ions, width_height=width_height, save=True, path=path, format=format)
+
+
 def mz_intensity_plot(mz_intensity, ion_range=None, save=False, path='img', format='png'):
     """
     Draw plot of mz vs intensity of all ions or part of them
@@ -794,7 +829,7 @@ species_to_name = {'h': 'human',
                    'm': 'macaque'}
 
 
-def draw_area_clusters(files, n=12, format='png'):
+def draw_area_clusters(files, n=12, format='png', **kwargs):
     """
     Draw k-mean clusterization with number of clusters from 2 to n on 1 plot
     :param files: iterable - collection with full paths to a matrix files
@@ -804,7 +839,7 @@ def draw_area_clusters(files, n=12, format='png'):
     """
     for file in files:
         # Load data
-        matrix = load_matrix(f'{file}')
+        matrix = load_matrix(file, **kwargs)
         print(f'Loaded {file}')
 
         # Get name of file without extension
@@ -836,7 +871,7 @@ def draw_clean_area_clusters(files, n=12, format='png', **kwargs):
     """
     for file in files:
         # Load data
-        matrix = load_matrix(f'{file}', **kwargs)
+        matrix = load_matrix(file, **kwargs)
         print(f'Loaded {file}')
 
         # Get name of file without extension
