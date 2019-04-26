@@ -1282,19 +1282,29 @@ def many_correlations(lcms, maldi2, span=(-100, 100, 5), method='absolute'):
     return df
 
 
-def plot_correlations(df, cutoff=30):
+def plot_correlations(correlations, cutoff=30):
+    """
+    Visualize df with correlations on different recalibrations in form of histogram
+    :param correlations: df - correlations on different offsets
+    :param cutoff: int - number of peaks which are considered as a threshold starting from which correlation is
+    informative
+    :return:
+    """
     # Compute some constants
-    max_peaks = df["peak_number"].max()
-    step = df.index[1] - df.index[0]
-    span = df.index[0], df.index[-1] + step, step
+    max_peaks = correlations["peak_number"].max()
+    step = correlations.index[1] - correlations.index[0]
+    span = correlations.index[0], correlations.index[-1] + step, step
 
     # Nullify correlations with small aligned peaks
-    df.loc[df['peak_number'] < cutoff, ['human_chimp_ratio_pearson', 'human_chimp_ratio_spearman',
+    correlations.loc[correlations['peak_number'] < cutoff, ['human_chimp_ratio_pearson', 'human_chimp_ratio_spearman',
                                             'human_macaque_ratio_pearson', 'human_macaque_ratio_spearman']] = 0
 
     # Draw plot
-    df.drop(columns=['peak_number']).plot(figsize=(12, 8))
-    plt.plot(df['peak_number'] / max_peaks, linestyle='--', label=f'peak_number_fraction, max {max_peaks}')
+    # Correlations
+    correlations.drop(columns=['peak_number']).plot(figsize=(12, 8))
+    # Aligned peak fraction
+    plt.plot(correlations['peak_number'] / max_peaks, linestyle='--', label=f'peak_number_fraction, max {max_peaks}')
+    # Horizontal edge of minimal appropriate peak number
     plt.hlines(cutoff / max_peaks, *span[:2], '#642e55', label=f'{cutoff} threshold')
     plt.legend()
 
