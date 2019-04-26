@@ -945,6 +945,57 @@ def draw_peak_clusters(files, n=12, format='png'):
     plt.close('all')
 
 
+def reindexed_draw_peak_clusters(files, n=12, format='png'):
+    """
+    Draw peak k-mean clusterization with number of clusters from 2 to n, variant for reindexed matrices.
+    There is a picture with all
+    :param files: iterable - collection with full paths to a matrix files
+    :param n: int - maximum number of clusters, 12 by default
+    :param format: str - format of figure, png by default
+    :return:
+    """
+    for file in files:
+        # Load data
+        matrix = load_matrix(file)
+        file = file.split('/')[-1].split('.')[0]
+        print(f'Loaded {file}')
+
+        # Create directory
+        os.makedirs(f'images/{file}/clusters/peaks', exist_ok=True)
+
+        # For each species clusterize peaks and draw a picture with clusterization
+        for species in ['h', 'c', 'm']:
+            # Take 1 species
+            subset = matrix.query(f'species == "{species}"')
+            print(f'Working with {species} subset')
+
+            # Clustering
+            clusters = kmeans_clustering(subset.T, n)
+            # Write clusterization to file
+            with open(f'images/{file}/clusters/peaks/peak_clusters_{species_to_name[species]}.json', 'w') as dest:
+                json.dump({cluster: labels.tolist() for cluster, labels in clusters.items()}, dest)
+
+            # Get necessary parameters for plotting
+            xs, ys, rows, cols, width_height = light_plot_preparation(subset)
+
+            # For each cluster create superplot
+            for i, cluster in clusters.items():
+                nrows, ncols, figsize = compute_layout(i, width_height)
+                f, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+                ax = ax.ravel()
+
+                # Draw each subplot
+                for j in range(i):
+                    image = np.zeros((rows, cols))
+                    image[ys, xs] = subset.loc[:, cluster == j].sum(axis=1)
+                    # 2 - minima of cluster number
+                    ax[j].imshow(image)
+                    ax[j].title.set_text(f'{i} clusters k-means\ncluster #{j}')
+                plt.savefig(f'images/{file}/clusters/peaks/kmeans_{species_to_name[species]}_clusters_{i}.{format}',
+                            format=format)
+    plt.close('all')
+
+
 def light_plot_preparation(data):
     """
     Helper to get necessary for plotting information
@@ -1154,6 +1205,98 @@ def load_dirt(path):
         dirt_mz = json.load(file)
     dirt_mz = pd.Float64Index(dirt_mz)
     return dirt_mz
+
+
+def reindexed_draw_area_clusters(files, n=12, format='png', **kwargs):
+    """
+    Draw k-mean clusterization with number of clusters from 2 to n on 1 plot
+    :param files: iterable - collection with full paths to a matrix files
+    :param n: int - maximum number of clusters, 12 by default
+    :param format: str - format of figure, png by default
+    :return:
+    """
+    for file in files:
+        # Load data
+        matrix = load_matrix(file, **kwargs)
+        print(f'Loaded {file}')
+
+        # Get name of file without extension
+        file = file.split('/')[-1].split('.')[0]
+
+        for species in ['h', 'c', 'm']:
+            # Get data for 1 species
+            subset = matrix.query(f'species == "{species}"')
+            print(f'Working with {species} subset')
+
+            # Clustering
+            draw_clusters(subset, f'images/{file}/clusters/area/',
+                          name=f'kmeans_{species_to_name[species]}_clusters.{format}',
+                          n=n, format=format)
+
+
+
+def select_peaks(species, peak_number=300, pixel_number=30):
+    """
+    Select appropriate peaks for correlation computing
+    :param species: dict - {'species': df} with species subset of maldi for each species
+    :param peak_number: int - number of peaks which should be selected for each species
+    :param pixel_number: int - minimal number of pixels with peak to be appropriate
+    :return: (dict, dict) - selected peaks for each species with and without counting blank pixels
+    """
+    # Prepare containers
+    max_intensity_peaks = {}
+    max_intensity_peaks_na = {}
+
+    # Get peaks with top mean intensity and number of pixels with value greater than threshold
+    # Compute mean with and without considering blank pixels
+    for sp, df in species.items():
+        dfn = df.copy()
+
+        max_intensity_peaks[sp] = df.loc[:, (df != 0).sum() > pixel_number].mean().nlargest(peak_number).index
+        dfn[dfn == 0] = np.nan
+        max_intensity_peaks_na[sp] = dfn.loc[:, (dfn != 0).sum() > pixel_number].mean().nlargest(peak_number).index
+
+    return max_intensity_peaks, max_intensity_peaks_na
+
+
+def many_correlations(lcms, maldi2, span=(-100, 100, 5), method='absolute'):
+    """
+    Compute correlations for different recalibration
+    :param lcms: df - LC dataset
+    :param maldi: df - MALDI dataset
+    :param span: tuple - (start, stop, step) for recalibration
+    :param method: str - recalibration method, absolute by default
+    :return: df - correlations for each recalibration value
+    """
+    colnames = ['human_chimp_ratio_pearson',
+                'human_chimp_ratio_spearman',
+                'human_macaque_ratio_pearson',
+                'human_macaque_ratio_spearman',
+                'peak_number']
+
+    # Compute correlations for different recalibrations
+    correlations = recalibrate_align(lcms, maldi2, span, method)
+
+    # Create df from correlation data
+    df = pd.DataFrame(correlations, index=np.arange(*span), columns=colnames)
+    return df
+
+
+def plot_correlations(df, cutoff=30):
+    # Compute some constants
+    max_peaks = df["peak_number"].max()
+    step = df.index[1] - df.index[0]
+    span = df.index[0], df.index[-1] + step, step
+
+    # Nullify correlations with small aligned peaks
+    df.loc[df['peak_number'] < cutoff, ['human_chimp_ratio_pearson', 'human_chimp_ratio_spearman',
+                                            'human_macaque_ratio_pearson', 'human_macaque_ratio_spearman']] = 0
+
+    # Draw plot
+    df.drop(columns=['peak_number']).plot(figsize=(12, 8))
+    plt.plot(df['peak_number'] / max_peaks, linestyle='--', label=f'peak_number_fraction, max {max_peaks}')
+    plt.hlines(cutoff / max_peaks, *span[:2], '#642e55', label=f'{cutoff} threshold')
+    plt.legend()
 
 
 # Example of usage
