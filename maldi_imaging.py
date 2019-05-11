@@ -1186,6 +1186,29 @@ def dummy_area_draw(matrix, n=1, clustering=None):
         plt.imshow(image)
 
 
+def divide_matrix(matrix, path):
+    """
+    Divide 1 matrix into 4 to make them tangible and write them to files
+    :param matrix: df - matrix with intensities
+    :param path: str - base path to save parts
+    :return:
+    """
+    # Get minimal and maximal xs and ys
+    xrange = matrix.index.get_level_values('x').values.min(), matrix.index.get_level_values('x').values.max()
+    yrange = matrix.index.get_level_values('y').values.min(), matrix.index.get_level_values('y').values.max()
+
+    # Create array with xticks and yticks - 2 parts
+    xr = np.linspace(*xrange, 3).round()
+    yr = np.linspace(*yrange, 3).round()
+    part = 0
+
+    # Get 1/4 of matrix by indices and write it to file
+    for x, nx in zip(xr, xr[1:]):
+        for y, ny in zip(yr, yr[1:]):
+            matrix.loc[pd.IndexSlice[:, x:nx, y:ny], :].to_csv(f'{path}_part{part}')
+            part += 1
+
+
 def normalization_tic(matrix):
     """
     Normalize matrix with TIC method - divide everything by matrix sum
@@ -1209,6 +1232,7 @@ def load_dirt(path):
 
 def reindexed_draw_area_clusters(files, n=12, format='png', **kwargs):
     """
+    #TODO mb make it more elegant than creating additional functions for reindexed matrices
     Draw k-mean clusterization with number of clusters from 2 to n on 1 plot
     :param files: iterable - collection with full paths to a matrix files
     :param n: int - maximum number of clusters, 12 by default
