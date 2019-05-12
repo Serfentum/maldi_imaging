@@ -1186,20 +1186,27 @@ def dummy_area_draw(matrix, n=1, clustering=None):
         plt.imshow(image)
 
 
-def divide_matrix(matrix, path):
+def divide_matrix(matrix, path, parts=4):
     """
-    Divide 1 matrix into 4 to make them tangible and write them to files
+    Divide 1 matrix into parts to make them tangible and write them to files
     :param matrix: df - matrix with intensities
     :param path: str - base path to save parts
+    :param parts: int - number of fragments
     :return:
     """
+    # Sort index to make slicing possible
+    matrix.sort_index(inplace=True)
+    
     # Get minimal and maximal xs and ys
     xrange = matrix.index.get_level_values('x').values.min(), matrix.index.get_level_values('x').values.max()
     yrange = matrix.index.get_level_values('y').values.min(), matrix.index.get_level_values('y').values.max()
 
+    # Number of parts on each dimension
+    fraction = np.sqrt(parts) + 1
+
     # Create array with xticks and yticks - 2 parts
-    xr = np.linspace(*xrange, 3).round()
-    yr = np.linspace(*yrange, 3).round()
+    xr = np.linspace(*xrange, fraction).round()
+    yr = np.linspace(*yrange, fraction).round()
     part = 0
 
     # Get 1/4 of matrix by indices and write it to file
