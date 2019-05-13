@@ -1212,7 +1212,7 @@ def divide_matrix(matrix, path, parts=4):
     # Get 1/4 of matrix by indices and write it to file
     for x, nx in zip(xr, xr[1:]):
         for y, ny in zip(yr, yr[1:]):
-            matrix.loc[pd.IndexSlice[:, x:nx, y:ny], :].to_csv(f'{path}_part{part}')
+            matrix.loc[pd.IndexSlice[:, x:nx, y:ny], :].to_csv(f'{path}_part{part}', sep='\t')
             part += 1
 
 
